@@ -4,6 +4,7 @@
 #include "channel.h"
 #include "song-repository.h"
 #include "AnalogMuxScanner.h"
+#include "integration-tests.h"
 
 // input bit mask
 #define PROGRAM_BTN 0
@@ -261,6 +262,7 @@ void scanChannelBoards() {
     channels[i].Button()->update(incoming, now);
 
     if(channels[i].Button()->wasPressed()) {
+      return; // disable comm for now
       Serial.print("Button pressed: ");
       Serial.println(i);
       if(programming) {
@@ -558,7 +560,7 @@ void loop() {
   scanAnalogInputMux();
  
 // NEXT SONG INDEX
-  if(!programming && nextSongBtn.wasPressed()) {
+  if(!programming && nextSongBtn.wasPressed() && !prevSongBtn.isDown()) {
     if(selectedSongNumber < MAX_SONGS-2)
       selectedSongNumber++;
     else
@@ -568,7 +570,7 @@ void loop() {
     Serial.println(selectedSongNumber);
   }
 // PREV SONG INDEX
-  if(!programming && prevSongBtn.wasPressed()) {
+  if(!programming && prevSongBtn.wasPressed() && !nextSongBtn.isDown()) {
     if(selectedSongNumber > 1)
       selectedSongNumber--;
     else
@@ -647,6 +649,15 @@ void loop() {
     channels[i].Run(now);
 
   updateUI();  
-  
+
+  // test runner
+  if(Serial.available()) {
+    int test;
+    int channel;
+    if(getSerialData(test, channel)) {
+      runIntegrationTest(test, channel, currentSong);
+    }
+  } 
+
 }
 
