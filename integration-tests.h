@@ -70,6 +70,63 @@ bool SamplerTest_SetDataFromMaster(TestContext context) {
   return true;
 }
 
+bool TempoTest_GetDataFromSlave(TestContext context) {
+  Serial.print("Running test TempoTest_GetDataFromSlave:");  
+  // arrange
+  TempoRegisters tempoRegisters;
+
+  // act
+  Wire.requestFrom(SLAVE_ADDR_TEMPO, sizeof(tempoRegisters));
+
+  // assert
+  if(Wire.available() == 0) {
+    Serial.println("Error while retrieving status from slave");
+    return false;
+  }
+  if(Wire.available() != sizeof(TempoRegisters)) {
+    char s[100];
+    sprintf(s, "Error data size from slave - expected: %d, actual: %d", sizeof(TempoRegisters), Wire.available());
+    Serial.println(s);
+    return false;
+  }
+  Wire.readBytes((char*)&tempoRegisters, sizeof(TempoRegisters));  
+
+  printTempoRegisters(tempoRegisters);
+
+  return true;
+}
+
+bool TempoTest_SetDataFromMaster(TestContext context, char* command) {
+  Serial.println("Running test TempoTest_SetDataFromMaster:");
+
+  // arrange
+  TempoRegisters tempoRegisters;
+
+  const size_t totalSize = sizeof(TempoRegisters);
+  TempoRegisters regs;
+  regs.bpm = 130;
+  regs.morphBars = 1;
+  regs.morphEnabled = true;
+  regs.morphTargetBpm = 170;
+
+  uint8_t buffer[totalSize];
+  memcpy(buffer, &regs, totalSize); 
+
+  // act
+  Wire.beginTransmission(SLAVE_ADDR_TEMPO);
+  Wire.write(command);
+  Wire.write(&buffer[0], totalSize);
+  int result = Wire.endTransmission(); 
+  if(result != 0) {
+    Serial.println("Error while sending data to slave");
+    return false;    
+  }
+
+  // assert
+
+  return true;
+}
+
 void runIntegrationTest(int testIndex, int channel, Song song) {
   char s[100];
   sprintf(s, "testIndex: %d  |  channel: %d", testIndex, channel);
@@ -90,6 +147,14 @@ void runIntegrationTest(int testIndex, int channel, Song song) {
       result = SamplerTest_GetDataFromSlave(context); break;
     case 1:
       result = SamplerTest_SetDataFromMaster(context); break;
+    case 2:
+      result = TempoTest_GetDataFromSlave(context); break;
+    case 3:
+      result = TempoTest_SetDataFromMaster(context, "set"); break;
+    case 4:
+      result = TempoTest_SetDataFromMaster(context, "stop"); break;
+    case 5:
+      result = TempoTest_SetDataFromMaster(context, "start"); break;            
     default:
       result = false; break;
   }
