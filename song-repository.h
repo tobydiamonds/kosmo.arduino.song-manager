@@ -18,7 +18,7 @@ void SetupSongRepository() {
 }
 
 bool SaveSong(Song song, int index) {
-  printSong(song);
+  //printSong(song);
 
   char filename[15];
   snprintf(filename, sizeof(filename), "song_%d.dat", index);
@@ -81,7 +81,7 @@ Song LoadSong(int index, bool &success) {
   Serial.println(filename);  
   success = true;
 
-  printSong(song);
+  //printSong(song);
 
   return song;
 }

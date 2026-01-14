@@ -5,6 +5,8 @@
 #include "song-repository.h"
 #include "AnalogMuxScanner.h"
 #include "integration-tests.h"
+#include "serial-song-parser.h"
+
 
 // input bit mask
 #define PROGRAM_BTN 0
@@ -82,6 +84,7 @@ AnalogMuxScanner analogPotBank1(MUX_S0, MUX_S1, MUX_S2, A0, A1, A2, CHANNELS);
 
 Channel channels[CHANNELS];
 
+SerialSongParser songParser(currentSong);
 
 void setup() {
   Serial.begin(115200);
@@ -185,11 +188,9 @@ void onClockPulse() {
 }
 
 void setCurrentSongDrumSequencerLastStep(int channel, int value) {
-  currentSong.parts[channel].drumSequencer.ch1_lastStep = value;
-  currentSong.parts[channel].drumSequencer.ch2_lastStep = value;
-  currentSong.parts[channel].drumSequencer.ch3_lastStep = value;
-  currentSong.parts[channel].drumSequencer.ch4_lastStep = value;
-  currentSong.parts[channel].drumSequencer.ch5_lastStep = value;
+  for(int i=0; i<5; i++) {
+    currentSong.parts[channel].drumSequencer.channel[channel].lastStep = value;
+  }
 }
 
 void onAnalogPotChangedHandler(int channel, int pot, uint16_t value) {
@@ -262,28 +263,28 @@ void scanChannelBoards() {
     channels[i].Button()->update(incoming, now);
 
     if(channels[i].Button()->wasPressed()) {
-      return; // disable comm for now
       Serial.print("Button pressed: ");
       Serial.println(i);
       if(programming) {
         while(!getSlaveRegisters(now));
         currentSong.parts[i].tempo = sharedTempoRegisters;
         currentSong.parts[i].drumSequencer = sharedDrumSequencerRegisters;
+        currentSong.parts[i].sampler = sharedSamplerRegisters;
         currentSong.parts[i].repeats = channels[i].Repeats();
         currentSong.parts[i].chainTo = channels[i].ChainTo();
-        channels[i].SetLastStep(getPartLastStep(currentSong.parts[i]));
+        //channels[i].SetLastStep(getPartLastStep(currentSong.parts[i]));
       } else {
-
-        if(channels[currentChannel].IsStarted()) {
-          int chainTo = channels[currentChannel].ChainTo();
-          channels[currentChannel].SetChainTo(i);
-          if(chainTo != -1 && channels[i].ChainTo() == -1)
-            channels[i].SetChainTo(chainTo);
-
-        } else {
-          startClock();  
-          channels[i].Start();
-        }
+        setSlaveRegisters(now, currentSong.parts[i]);  
+        // if(channels[currentChannel].IsStarted()) {
+        //   int chainTo = channels[currentChannel].ChainTo();
+        //   channels[currentChannel].SetChainTo(i);
+        //   if(chainTo != -1 && channels[i].ChainTo() == -1) {
+        //     channels[i].SetChainTo(chainTo);
+        //   }
+        // } else {
+        //   startClock();  
+        //   channels[i].Start();
+        // }
       }
     }
     
@@ -496,19 +497,21 @@ void updateUI() {
 
 uint8_t getPartLastStep(Part part) {
   uint8_t lastStep = 0;
-  lastStep = max(lastStep, part.drumSequencer.ch1_lastStep);
-  lastStep = max(lastStep, part.drumSequencer.ch2_lastStep);
-  lastStep = max(lastStep, part.drumSequencer.ch3_lastStep);
-  lastStep = max(lastStep, part.drumSequencer.ch4_lastStep);
-  lastStep = max(lastStep, part.drumSequencer.ch5_lastStep);
+  for(int i=0; i<5; i++) {
+    lastStep = max(lastStep, part.drumSequencer.channel[i].lastStep);
+  }
   return lastStep;
+}
+
+void applyCurrentSongToChannel(int index) {
+  channels[index].SetLastStep(getPartLastStep(currentSong.parts[index]));
+  channels[index].SetChainTo(currentSong.parts[index].chainTo);
+  channels[index].SetRepeats(currentSong.parts[index].repeats);  
 }
 
 void applyCurrentSongToChannels() {
   for(int i=0; i<CHANNELS; i++) {
-    channels[i].SetLastStep(getPartLastStep(currentSong.parts[i]));
-    channels[i].SetChainTo(currentSong.parts[i].chainTo);
-    channels[i].SetRepeats(currentSong.parts[i].repeats);
+    applyCurrentSongToChannel(i);
   }
 }
 
@@ -597,7 +600,6 @@ void loop() {
   if(programming && loadBtn.wasPressed()) { 
       programming = false;
       programmingLed = false;
-      endProgrammingModeForAllSlaves(now);      
       resetTempoRegisters(sharedTempoRegisters);
       resetDrumSequencerRegisters(sharedDrumSequencerRegisters);      
       Serial.println("programming cancelled - song not saved");
@@ -652,10 +654,19 @@ void loop() {
 
   // test runner
   if(Serial.available()) {
-    int test;
-    int channel;
-    if(getSerialData(test, channel)) {
-      runIntegrationTest(test, channel, currentSong);
+    if(programming) {
+      String command = Serial.readStringUntil('\n');
+      int index = songParser.parseCommand(command);    
+      if(index >= 0 && index < CHANNELS) {
+        applyCurrentSongToChannel(index);
+        setSlaveRegisters(now, currentSong.parts[index]); 
+      }
+    } else {
+      int test;
+      int channel;
+      if(getSerialData(test, channel)) {
+        runIntegrationTest(test, channel, currentSong);
+      }
     }
   } 
 

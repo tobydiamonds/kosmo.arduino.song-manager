@@ -3,6 +3,7 @@
 
 #include <Wire.h>
 #include "shared.h"
+#include "serial-functions.h"
 
 #define SLAVE_ADDR_TEMPO 8
 #define SLAVE_ADDR_DRUM_SEQUENCER 9
@@ -127,6 +128,90 @@ bool TempoTest_SetDataFromMaster(TestContext context, char* command) {
   return true;
 }
 
+bool SequencerTest_GetDataFromSlave(TestContext context) {
+  Serial.println("Running test SequencerTest_GetDataFromSlave:");  
+
+  // arrange
+  DrumSequencer registers;
+  size_t totalSize = sizeof(DrumSequencer);
+  int currentChunk = 0;
+  int totalChunks = (totalSize + 31) / 32;
+  int chunkIndex = 0;
+
+  // act 
+  for(int i=0; i<totalChunks; i++) {
+    size_t offset = chunkIndex * 32;
+    size_t chunkSize = min(32, totalSize - offset);
+    Wire.requestFrom(SLAVE_ADDR_DRUM_SEQUENCER, chunkSize);    
+    uint8_t buffer[chunkSize];
+    size_t bytesRead = 0;
+
+    while(Wire.available()) {
+      buffer[bytesRead++] = Wire.read();
+    }
+
+    char s[100];
+    sprintf(s, "Reading %d/%d => ", i, totalChunks);
+    Serial.print(s);
+    for(int j=0; j<bytesRead; j++) {
+      Serial.print(buffer[j], HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
+
+    memcpy((uint8_t*)&registers + offset, buffer, bytesRead);
+    chunkIndex++;    
+  }
+
+  // assert
+  printDrumSequencer(registers);
+  return true;
+}
+
+bool SequencerTest_SetDataFromMaster(TestContext context) {
+  Serial.println("Running test SequencerTest_SetDataFromMaster:");
+
+  // arrange
+  bool ena[5] = {true, true, false, false, false};
+  int steps[5] = {31, 31, 0, 0, 0};
+
+  DrumSequencer regs;
+  for(int i=0; i<5; i++) {
+    regs.channel[i].divider = 6;
+    regs.channel[i].enabled = ena[i];
+    regs.channel[i].lastStep = steps[i];
+    regs.channel[i].page[0] = 0x8888;
+    regs.channel[i].page[1] = 0x888D;
+    regs.channel[i].page[2] = 0;
+    regs.channel[i].page[3] = 0;
+  }
+  regs.chainModeEnabled = false;
+  size_t totalSize = sizeof(DrumSequencer);
+  int totalChunks = (totalSize + 31) / 32;
+  int chunkIndex = 0;
+
+  uint8_t buffer[totalSize];
+  memcpy(buffer, &regs, totalSize);  
+
+  // act
+  for(int i=0; i<totalChunks; i++) {
+    size_t offset = chunkIndex * 32;
+    size_t chunkSize = min(32, totalSize - offset);
+    Wire.beginTransmission(SLAVE_ADDR_DRUM_SEQUENCER);
+    Wire.write(&buffer[offset], chunkSize);
+    int result = Wire.endTransmission(); 
+    if(result != 0) {
+      Serial.println("Error while sending data to slave");
+      return false;    
+    }
+    chunkIndex++;    
+  }
+
+  // assert
+
+  return true;
+}
+
 void runIntegrationTest(int testIndex, int channel, Song song) {
   char s[100];
   sprintf(s, "testIndex: %d  |  channel: %d", testIndex, channel);
@@ -155,6 +240,10 @@ void runIntegrationTest(int testIndex, int channel, Song song) {
       result = TempoTest_SetDataFromMaster(context, "stop"); break;
     case 5:
       result = TempoTest_SetDataFromMaster(context, "start"); break;            
+    case 6:
+      result = SequencerTest_GetDataFromSlave(context); break;
+    case 7:
+      result = SequencerTest_SetDataFromMaster(context); break;
     default:
       result = false; break;
   }
@@ -166,72 +255,6 @@ void runIntegrationTest(int testIndex, int channel, Song song) {
     Serial.println("INTEGRATION TEST COMPLETED WITH ERRORS!!!");  
 }
 
-String allowedChars = "0123456789";
-bool isIntValue(String s) {
-  if(s.length()==0)
-    return false;
-
-  for(int i=0; i<s.length(); i++) {
-    if(allowedChars.indexOf(s.charAt(i)) == -1)
-      return false;
-  }
-  return true;
-}
-
-bool tryGetInt(String data, int offset, int end, int& value) {
-  value = 0;
-  if(data.length()==0) return false;
-  if(offset < 0) return false;
-  if(offset > end) return false;
-  if(end > data.length()) return false;
-
-  String v = data.substring(offset, end);
-  v.trim();
-  if(isIntValue(v)) {
-    value = v.toInt();
-    return true;
-  }
-  return false;
-}
-
-bool getSerialData(int& test, int& channel) {
-  while(Serial.available()) {
-      String data = Serial.readString();
-      data.trim();
-
-      // find seperators
-      int seperators[4] = {};
-      int length = 0;
-      for(int i=0; i<data.length(); i++) {
-        if(data.charAt(i) == ' ') {
-          seperators[length] = i;
-          length++;
-        }
-      }
-
-      // extract data values
-      int values[5] = {};      
-      int offset = 0;
-      int valueCount = 0;
-      for(int i=0; i<length; i++) {
-        int value;
-        if(tryGetInt(data, offset, seperators[i], value))
-          values[valueCount++] = value;
-        offset = seperators[i];
-      }
-      // get the last value
-      if(seperators[length-1]<data.length()) {
-        int value;
-        if(tryGetInt(data, seperators[length-1]+1, data.length(), value))
-          values[valueCount++] = value;
-      }
-
-      if(valueCount!=2) return false;
-      test = values[0];
-      channel = values[1];
-      return true;
-    }
-}
 
 
 

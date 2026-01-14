@@ -185,7 +185,7 @@ public:
 
   void SetLastStep(uint8_t value) {
     _lastStep = value;
-    int pageCount = (_lastStep == 0) ? 0 : ((_lastStep < 16) ? 1 : _lastStep / 16);
+    int pageCount = (_lastStep == 0) ? 0 : ((_lastStep < 16) ? 1 : (_lastStep+1) / 16);
     SetPageCount(pageCount);
   }
 };
