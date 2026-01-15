@@ -66,16 +66,47 @@ uint8_t byteToBitMask(uint8_t b, uint8_t bitOrder = LSBFIRST) {
   return mask;
 }
 
-String allowedChars = "0123456789";
-bool isIntValue(String s) {
-  if(s.length()==0)
-    return false;
+String* splitString(String data, char delimiter, int &size) {
+    int count = 0;
+    for (int i = 0; i < data.length(); i++) {
+        if (data.charAt(i) == delimiter) {
+            count++;
+        }
+    }
 
-  for(int i=0; i<s.length(); i++) {
-    if(allowedChars.indexOf(s.charAt(i)) == -1)
-      return false;
-  }
-  return true;
+    size = count + 1; // Number of substrings
+    String* result = new String[size];
+
+    int startIndex = 0;
+    int resultIndex = 0;
+    for (int i = 0; i <= data.length(); i++) {
+        if (i == data.length() || data.charAt(i) == delimiter) {
+            result[resultIndex] = data.substring(startIndex, i);
+            startIndex = i + 1;
+            resultIndex++;
+        }
+    }
+
+    return result;
+}
+
+//String allowedChars = "0123456789";
+bool isIntValue(String s) {
+    if (s.length() == 0) return false;
+    int start = 0;
+    
+    // Check for a leading minus sign
+    if (s.charAt(0) == '-') {
+        start = 1;
+        if (s.length() == 1) return false; // Just a minus sign is not valid
+    }
+
+    for (int i = start; i < s.length(); i++) {
+        if (!isDigit(s.charAt(i))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool tryGetInt(String data, int offset, int end, int& value) {
@@ -95,6 +126,35 @@ bool tryGetInt(String data, int offset, int end, int& value) {
 }
 
 
+bool tryGetInt(String data, int& value) {
+    return tryGetInt(data, 0, data.length(), value);
+}
+
+bool tryParseInt(String data, uint16_t& value) {
+    data.trim();
+    
+    // Check for binary format
+    if (data.startsWith("0b") || data.length() == 16) {
+        value = 0;
+        for (int i = 0; i < data.length(); i++) {
+            char c = data.charAt(i);
+            if (c == '0' || c == '1') {
+                value = (value << 1) | (c - '0');
+            } else if (c != 'b') {
+                return false; // Invalid character for binary
+            }
+        }
+        return true;
+    }
+    
+    // Check for hexadecimal format
+    if (data.startsWith("0x")) {
+        value = strtol(data.c_str(), nullptr, 16);
+        return true;
+    }
+
+    return false; // Unsupported format
+}
 
 struct KosmoSlave {
   int address;
