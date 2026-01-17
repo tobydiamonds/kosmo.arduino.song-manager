@@ -10,6 +10,16 @@
 
 #define CHANNELS 8
 
+
+enum SlaveEnum {
+  TEMPO = 0,
+  DRUM_SEQUENCER = 1,
+  SAMPLER = 2,
+  PROGRAMMER = 100,
+  ALL = -1,
+  NONE = -2
+};
+
 void printByte(uint8_t b, uint8_t bitOrder = LSBFIRST) {
   if(bitOrder == LSBFIRST) {
     for(int j=7; j>=0; j--) {
@@ -179,9 +189,9 @@ struct SamplerRegisters {
 
 struct DrumSequencerChannel {
   uint16_t page[4] = {0};
-  int divider;
-  int lastStep;
-  bool enabled;  
+  int divider = 6;
+  int lastStep = 0;
+  bool enabled = false;  
 };
 
 struct DrumSequencer {
@@ -212,6 +222,19 @@ TempoRegisters sharedTempoRegisters;
 DrumSequencer sharedDrumSequencerRegisters;
 SamplerRegisters sharedSamplerRegisters;
 
+int firstSongPart(Song song) {
+  int index = -1;
+  for(int i=0; i<CHANNELS; i++) {
+    if(index == -1) {
+      for(int j=0; j<5; j++) {
+        if(song.parts[i].drumSequencer.channel[j].lastStep > 0) {
+          index = i;
+        }
+      }
+    }
+  }
+}
+
 void resetSamplerRegisters(SamplerRegisters &regs) {
   regs.bank = 0;
   for(int i=0; i<5; i++)
@@ -227,7 +250,7 @@ void resetTempoRegisters(TempoRegisters &regs) {
 void resetDrumSequencerRegisters(DrumSequencer &regs) {
     regs.chainModeEnabled = false;
     for(int i=0; i<5; i++) {
-      regs.channel[i].divider = 0;
+      regs.channel[i].divider = 6;
       regs.channel[i].lastStep = 0;
       regs.channel[i].enabled = false;
       for(int p=0; p<4; p++) {

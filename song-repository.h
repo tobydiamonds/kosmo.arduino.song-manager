@@ -4,6 +4,8 @@
 #include "shared.h"
 #include <SPI.h>
 #include <SD.h>
+#include "serial-song-parser.h"
+#include "song-writer.h"
 
 const int SD_CS_PIN = 53;
 
@@ -28,21 +30,8 @@ bool SaveSong(Song song, int index) {
     SD.remove(filename);
   }
 
-  // save the content of the struct in the file
-  File file = SD.open(filename, FILE_WRITE);
-  if(!file) {
-    Serial.print("error accessing file: ");
-    Serial.println(filename);
-    return false;
-  }
-  size_t bytesWritten = file.write((const uint8_t*)&song, sizeof(Song));
-  file.close();
-
-  if(bytesWritten != sizeof(Song)) {
-    Serial.print("error writing to file: ");
-    Serial.println(filename);    
-    return false;
-  }
+  SongWriter writer;
+  writer.Save(filename, song);
 
   Serial.print("Song saved to: ");
   Serial.println(filename);  
@@ -68,15 +57,19 @@ Song LoadSong(int index, bool &success) {
   }
 
   Song song = Song();
-  size_t bytesRead = file.read((uint8_t*)&song, sizeof(Song));
-  file.close();
-  if (bytesRead < sizeof(Song)) {
-    // Pad the remainder of the struct with 0x00 if the read was short
-    memset(reinterpret_cast<uint8_t*>(&song) + bytesRead, 0x00, sizeof(Song) - bytesRead);
-    char s[100];
-    sprintf(s, "Warning: Incomplete read. Read: %d. Padded: %d", bytesRead, (int)(sizeof(Song) - bytesRead));
-    Serial.println(s);
+  SerialSongParser parser(song);
+
+  while (file.available()) {
+    String command = file.readStringUntil('\n');
+    SlaveEnum target;
+    int partIndex = parser.parseCommand(command, target);
+    if (partIndex == -1) {
+      Serial.println("Error parsing command.");
+      success = false;
+      return Song();
+    }
   }
+  file.close();
   Serial.print("Song loaded from: ");
   Serial.println(filename);  
   success = true;
@@ -84,6 +77,30 @@ Song LoadSong(int index, bool &success) {
   //printSong(song);
 
   return song;
+}
+
+void PeekSong(int index) {
+  Song song;
+  char filename[15];
+  snprintf(filename, sizeof(filename), "song_%d.dat", index);
+  if(!SD.exists(filename)) {
+    Serial.print("File does not exist: ");
+    Serial.println(filename);
+    return;
+  }
+
+  File file = SD.open(filename);
+  if(!file) {
+    Serial.print("error accessing file: ");
+    Serial.println(filename);
+    return;    
+  }  
+
+  while (file.available()) {
+    String command = file.readStringUntil('\n');
+    Serial.println(command);
+  }
+  file.close();  
 }
 
 

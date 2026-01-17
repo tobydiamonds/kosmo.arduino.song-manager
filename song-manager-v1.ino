@@ -60,8 +60,8 @@ unsigned long lastSongBlink = 0;
 unsigned long lastClockInLed = 0;
 
 Song currentSong;
-uint8_t currentSongNumber = 0;
-uint8_t selectedSongNumber = 0;
+uint8_t currentSongNumber = 1;
+uint8_t selectedSongNumber = 1;
 uint8_t currentChannel = 0;
 bool songIsLoading = false;
 bool songIsPlaying = false;
@@ -136,6 +136,7 @@ void LoadSongAndUpdateChannels(int index) {
   Serial.print("Loading song: ");
   Serial.println(index);  
 
+  Song prev = currentSong;
   resetSong(currentSong);
 
   bool success;
@@ -144,6 +145,10 @@ void LoadSongAndUpdateChannels(int index) {
     char s[100];
     sprintf(s, "Error loading song %d", index);
     Serial.println(s);
+    currentSong = prev;
+    songIsLoading = false; 
+    songLoadingLed = false;
+    selectedSongNumber = currentSongNumber;
   } else {
     applyCurrentSongToChannels();
     Serial.println("###SONG LOADED###");
@@ -152,6 +157,9 @@ void LoadSongAndUpdateChannels(int index) {
     songLoadingLed = false;
     currentSongNumber = index;
     selectedSongNumber = index;
+
+    //PeekSong(index);
+
   }  
 }
 
@@ -205,22 +213,22 @@ void onAnalogPotChangedHandler(int channel, int pot, uint16_t value) {
     currentSong.parts[channel].chainTo = channels[channel].ChainTo();    
   }
 
-  // ###handle bad pots###
-  // channel 2,pot 0 always read max value so we set it to 1 page to make it usefull
-  if(channel == 2 && pot == 0) {
-    channels[channel].SetPageCount(1);
-    setCurrentSongDrumSequencerLastStep(channel, 16);
-  }
-  // channel 4,pot 1 always read max value so we set it to 0 repeats to make it usefull
-  if(channel == 4 && pot == 1) {
-    channels[channel].SetRepeats(0);
-    currentSong.parts[channel].repeats = 0;   
-  }
-  // channel 6,pot 0 is unstable so we set it to 1 page to make it usefull
-  if(channel == 6 && pot == 0) {
-    channels[channel].SetPageCount(1);
-    setCurrentSongDrumSequencerLastStep(channel, 16);
-  }
+  // // ###handle bad pots###
+  // // channel 2,pot 0 always read max value so we set it to 1 page to make it usefull
+  // if(channel == 2 && pot == 0) {
+  //   channels[channel].SetPageCount(1);
+  //   setCurrentSongDrumSequencerLastStep(channel, 16);
+  // }
+  // // channel 4,pot 1 always read max value so we set it to 0 repeats to make it usefull
+  // if(channel == 4 && pot == 1) {
+  //   channels[channel].SetRepeats(0);
+  //   currentSong.parts[channel].repeats = 0;   
+  // }
+  // // channel 6,pot 0 is unstable so we set it to 1 page to make it usefull
+  // if(channel == 6 && pot == 0) {
+  //   channels[channel].SetPageCount(1);
+  //   setCurrentSongDrumSequencerLastStep(channel, 16);
+  // }
 
 }
 
@@ -504,7 +512,8 @@ uint8_t getPartLastStep(Part part) {
 }
 
 void applyCurrentSongToChannel(int index) {
-  channels[index].SetLastStep(getPartLastStep(currentSong.parts[index]));
+  uint8_t lastStep = getPartLastStep(currentSong.parts[index]);
+  channels[index].SetLastStep(lastStep);
   channels[index].SetChainTo(currentSong.parts[index].chainTo);
   channels[index].SetRepeats(currentSong.parts[index].repeats);  
 }
@@ -617,6 +626,8 @@ void loop() {
 
       Serial.println("###SONG SAVED###");
 
+      //PeekSong(selectedSongNumber);
+
       programming = false;
       programmingLed = false;
       resetTempoRegisters(sharedTempoRegisters);
@@ -652,23 +663,47 @@ void loop() {
 
   updateUI();  
 
-  // test runner
   if(Serial.available()) {
-    if(programming) {
-      String command = Serial.readStringUntil('\n');
-      int index = songParser.parseCommand(command);    
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    if(command=="init") {
+      resetSong(currentSong);
+      applyCurrentSongToChannels();
+      Serial.println("Song initialized");
+    } else if (command=="apply") {
+      applyCurrentSongToChannels();
+      int index = firstSongPart(currentSong);
       if(index >= 0 && index < CHANNELS) {
-        applyCurrentSongToChannel(index);
         setSlaveRegisters(now, currentSong.parts[index]); 
       }
+      Serial.print("Song loaded from serial and modules loaded from part: ");
+      Serial.println(index);
     } else {
-      int test;
-      int channel;
-      if(getSerialData(test, channel)) {
-        runIntegrationTest(test, channel, currentSong);
-      }
+      SlaveEnum target;
+      int index = songParser.parseCommand(command, target);    
+      if(programming && index >= 0 && index < CHANNELS) {
+        applyCurrentSongToChannel(index);
+      }    
+      if(programming && index >= 0 && index < CHANNELS && target >= 0 && target < 100) {
+        setSlaveRegisters(now, currentSong.parts[index], target); 
+      }      
     }
-  } 
+    // if(programming) {
+    //   String command = Serial.readStringUntil('\n');
+    //   SlaveEnum target;
+    //   int index = songParser.parseCommand(command, target);    
+    //   if(index >= 0 && index < CHANNELS) {
+    //     applyCurrentSongToChannel(index);
+    //     setSlaveRegisters(now, currentSong.parts[index], target); 
+    //   }
+    // } else {
 
+    //   int test;
+    //   int channel;
+    //   if(getSerialData(test, channel)) {
+    //     runIntegrationTest(test, channel, currentSong);
+    //   }
+    // }
+  } 
 }
 

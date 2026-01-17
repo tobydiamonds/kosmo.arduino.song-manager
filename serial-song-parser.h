@@ -4,49 +4,63 @@
 
 class SerialSongParser {
   private:
-    Song& currentSong;
+    Song& _song;
+    const int allowedDividers[7] = {3,6,8,9,12,15,24};
 
-    void parseDrumSequencerCommand(int partIndex, String path, String data) {
+    bool isDividerAllowed(int divider) {
+      for (int i = 0; i < 7; i++) {
+        if (allowedDividers[i] == divider) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    bool parseDrumSequencerCommand(int partIndex, String path, String data) {
+      bool error = false;
       int pathSize;
       String* paths = splitString(path, '.', pathSize);
       
       int channel = -1;
-      String setting = "";
+      String function = "";
       if(pathSize==1) {
         channel = paths[0].toInt();
       } else if(pathSize==2) {
         channel = paths[0].toInt();
-        setting = paths[1];
+        function = paths[1];
       }
       delete[] paths;
 
       if(channel == -1) {
         Serial.println("Invalid channel");
-        return;
+        return false;
       }
 
       int valueSize;
       String* values = splitString(data, ' ', valueSize);
       
-      if(setting=="div") {
+      if(function=="div") {
         int divider;
-        if(valueSize == 1 && tryGetInt(values[0], divider)) {
-          currentSong.parts[partIndex].drumSequencer.channel[channel].divider = divider;
+        if(valueSize == 1 && tryGetInt(values[0], divider) && isDividerAllowed(divider)) {
+          _song.parts[partIndex].drumSequencer.channel[channel].divider = divider;
         } else {
           Serial.println("Invalid argument setting divider");          
+          error = true;
         }
-      } else if(setting=="ena") {
+      } else if(function=="ena") {
         if(valueSize == 1) {
-          currentSong.parts[partIndex].drumSequencer.channel[channel].enabled = values[0] == "1";
+          _song.parts[partIndex].drumSequencer.channel[channel].enabled = values[0] == "1";
         } else {
           Serial.println("Invalid argument setting enabled");          
+          error = true;
         }
-      } else if(setting=="last") {
+      } else if(function=="last") {
         int laststep;
-        if(valueSize == 1 && tryGetInt(values[0], laststep)) {
-          currentSong.parts[partIndex].drumSequencer.channel[channel].lastStep = laststep;
+        if(valueSize == 1 && tryGetInt(values[0], laststep) && laststep >= 0 && laststep <= 63) {
+          _song.parts[partIndex].drumSequencer.channel[channel].lastStep = laststep;
         } else {
           Serial.println("Invalid argument setting laststep");          
+          error = true;
         }
       } else {
         // we are setting the steps - each value part corresponds to a page
@@ -55,32 +69,69 @@ class SerialSongParser {
           if(!tryParseInt(values[i], steps)) {
             steps = 0;
           }
-          currentSong.parts[partIndex].drumSequencer.channel[channel].page[i] = steps;
+          _song.parts[partIndex].drumSequencer.channel[channel].page[i] = steps;
         }
       }
 
       delete[] values;
 
-      printDrumSequencerChannel(currentSong.parts[partIndex].drumSequencer.channel[channel], channel);
+      //printDrumSequencerChannel(_song.parts[partIndex].drumSequencer.channel[channel], channel);
+      return !error;
     }
 
-    void parseSamplerCommand(int partIndex, String details, String values) {
-      int channelIndex = details.substring(0, details.indexOf('.')).toInt();
-      String function = details.substring(details.indexOf('.') + 1, details.indexOf('='));
-      String value = details.substring(details.indexOf('=') + 1);
+    bool parseTempoCommand(int partIndex, String path, String values) {
+      bool error = false;
+      int bpm;
+      if(tryGetInt(values, bpm)) {
+        _song.parts[partIndex].tempo.bpm = bpm;
+      } else {
+        Serial.println("Invalid bpm-value");
+        error = true;
+      }
+      return !error;
+    }
+
+    bool parseSamplerCommand(int partIndex, String path, String values) {
+      bool error = false;
+      int pathSize;
+      String* paths = splitString(path, '.', pathSize);
+      
+      int channel = -1;
+      String function = "";
+      if(path.length()==0) {
+        function = "bank";
+      } else if(pathSize==2) {
+        channel = paths[0].toInt();
+        function = paths[1];
+      }
+      delete[] paths;
+
+      if(function == "mix" && channel == -1) {
+        Serial.println("Invalid channel");
+        return false;
+      }
 
       if (function == "mix") {
-        currentSong.parts[partIndex].sampler.mix[channelIndex] = value.toInt();
+        int mix;
+        if(tryGetInt(values, mix) && mix >= 0 && mix <= 1023) {
+          _song.parts[partIndex].sampler.mix[channel] = mix;
+        } else {
+          Serial.println("Invalid mix-value");
+          error = true;
+        }
       } else {
-        currentSong.parts[partIndex].sampler.bank = value.toInt();
+        int bank;
+        if(tryGetInt(values, bank) && bank >= 0 && bank <= 99) {
+          _song.parts[partIndex].sampler.bank = bank;
+        } else {
+          Serial.println("Invalid bank-value");
+          error = true;
+        }
       }
+      return !error;
     }
 
-    void parseSongProgrammerCommand(int partIndex, String values) {
-      Serial.println("Parsing Song Programmer Command:");
-      Serial.print("Values: ");
-      Serial.println(values);
-
+    bool parseSongProgrammerCommand(int partIndex, String values) {
       bool error = false;
 
       int pages;
@@ -112,36 +163,43 @@ class SerialSongParser {
       // Validate ranges
       if (pages < 0 || pages > 4) {
         Serial.println("Invalid pages value!");
-        return -1;
+        error = true;
       }
       if (repeats < 0 || repeats > 32) {
         Serial.println("Invalid repeats value!");
-        return -1;
+        error = true;
       }
       if (chainTo < -1 || chainTo > 15) {
         Serial.println("Invalid chainTo value!");
-        return -1;
+        error = true;
       }      
-      currentSong.parts[partIndex].repeats = repeats;
-      currentSong.parts[partIndex].chainTo = chainTo;
+
+      if(error) return false;
+
+      _song.parts[partIndex].repeats = repeats;
+      _song.parts[partIndex].chainTo = chainTo;
 
        // Calculate lastStep based on pages
       int lastStep = pages * 16 - 1;
       if (pages == 0) lastStep = 0;
 
-      // Set lastStep for all channels
-      for (int i = 0; i < CHANNELS; i++) {
-        currentSong.parts[partIndex].drumSequencer.channel[i].lastStep = lastStep;
+      // Set lastStep for all drum sequencer channels
+      for (int i = 0; i < 5; i++) {
+        _song.parts[partIndex].drumSequencer.channel[i].lastStep = lastStep;
       }
 
-      Serial.print("Last Step set to: ");
-      Serial.println(lastStep);
+      return true;
     }
 
   public:
-    SerialSongParser(Song& song) : currentSong(song) {}
+    SerialSongParser(Song& song) : _song(song) {}
 
-    int parseCommand(String command) {
+    int parseCommand(String command, SlaveEnum &target) {
+      target = NONE;
+
+      if(command=="init") return -1;
+      if(command=="apply") return -1;
+
       int partIndex;
       String module;
       String path;
@@ -149,23 +207,24 @@ class SerialSongParser {
 
       // Split the command into parts
       if(command.indexOf('=') == -1) {
-        Serial.println("Invalid command - missing =");
+        Serial.print("Invalid command - missing '=' : ");
+        Serial.println(command);
         return -1; // invalid command
       }
       
       int size=0;
       String* parts = splitString(command, ':', size);
 
-      char s[100];
-      sprintf(s, "command: %s  (%d parts) => ", command.c_str(), size);
-      Serial.print(s);      
-      for(int i=0; i<size; i++) {
-        Serial.print(parts[i]);
-        if(i<size-1) {
-          Serial.print(",");
-        }
-      }
-      Serial.println();
+      // char s[100];
+      // sprintf(s, "command: %s  (%d parts) => ", command.c_str(), size);
+      // Serial.print(s);      
+      // for(int i=0; i<size; i++) {
+      //   Serial.print(parts[i]);
+      //   if(i<size-1) {
+      //     Serial.print(",");
+      //   }
+      // }
+      // Serial.println();
 
       if(size==1) { // no module
         // e.g. 0=2 0 2
@@ -198,18 +257,30 @@ class SerialSongParser {
 
       delete[] parts;
 
-      sprintf(s, "partIndex: %d | module: %s | path: %s | values: %s", partIndex, module.c_str(), path.c_str(), values.c_str());
-      Serial.println(s);
+      // sprintf(s, "partIndex: %d | module: %s | path: %s | values: %s", partIndex, module.c_str(), path.c_str(), values.c_str());
+      // Serial.println(s);
+
+      module.trim();
+      path.trim();
+      values.trim();
+
+      bool result = true;
 
       if (module == "seq") {
-        parseDrumSequencerCommand(partIndex, path, values);
+        result = parseDrumSequencerCommand(partIndex, path, values);
+        target = DRUM_SEQUENCER;
       } else if (module == "tempo") {
-        currentSong.parts[partIndex].tempo.bpm = values.toInt();
+        result = parseTempoCommand(partIndex, path, values);
+        target = TEMPO;
       } else if (module == "sampler") {
-        parseSamplerCommand(partIndex, path, values);
+        result = parseSamplerCommand(partIndex, path, values);
+        target = SAMPLER;
       } else {
-        parseSongProgrammerCommand(partIndex, values);
+        result = parseSongProgrammerCommand(partIndex, values);
+        target = PROGRAMMER;
       }
+
+      if(!result) return -1;
 
       return partIndex;
     }

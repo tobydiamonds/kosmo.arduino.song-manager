@@ -15,6 +15,7 @@
 
 
 
+
 const int numberOfSlaves = 3;
 KosmoSlave slaves[numberOfSlaves] = {
   {SLAVE_ADDR_TEMPO, false, false, 0,0, sizeof(TempoRegisters)},
@@ -179,20 +180,30 @@ bool setSamplerRegisters(unsigned long now, int slaveIndex, SamplerRegisters sam
   return true;
 }
 
-void setSlaveRegisters(unsigned long now, Part part) {
-  for(int i=0; i<numberOfSlaves; i++) {
-    Serial.print("Starting SET request to slave ");
-    Serial.println(i);
-    slaves[i].requestInProgress = true;
+void setSlaveRegister(unsigned long now, Part part, SlaveEnum slave) {
+  int index = (int)slave;
 
-    if(i==0)
-      setKosmoTempoRegisters(now, 0, part.tempo);
-    else if(i==1)
-      setKosmoDrumSequencerRegisters(now, 1, part.drumSequencer);
-    else if(i==2)
-      setSamplerRegisters(now, 2, part.sampler);
+  Serial.print("Starting SET request to slave ");
+  Serial.println(index);
+  slaves[index].requestInProgress = true;
 
-    slaves[i].requestInProgress = false;
+  if(slave == TEMPO)
+    setKosmoTempoRegisters(now, (int)slave, part.tempo);
+  else if(slave == DRUM_SEQUENCER)
+    setKosmoDrumSequencerRegisters(now, (int)slave, part.drumSequencer);
+  else if(slave == SAMPLER)
+    setSamplerRegisters(now, (int)slave, part.sampler);
+
+  slaves[index].requestInProgress = false;
+}
+
+void setSlaveRegisters(unsigned long now, Part part, SlaveEnum slave = ALL) {
+  if(slave == ALL) {
+    for(int i=0; i<numberOfSlaves; i++) {
+      setSlaveRegister(now, part, (SlaveEnum)i);
+    }
+  } else {
+    setSlaveRegister(now, part, slave);
   }
 }
 
