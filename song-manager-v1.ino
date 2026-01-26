@@ -110,6 +110,7 @@ void setup() {
   for(int i=0; i<CHANNELS; i++) {
     channels[i] = Channel(i, 7-i); // first parameter: channel nummber, second parameter: bit index of the channel button from 595
     channels[i].OnPartCompleted(onPartCompleted);
+    channels[i].OnBeforePartCompleted(onBeforePartCompleted);
     channels[i].OnPartStarted(onPartStarted);
     channels[i].OnPartStopped(onPartStopped);
   }
@@ -126,7 +127,8 @@ void setup() {
 
   Serial.println("Song Manager ready!");
 
-  LoadSongAndUpdateChannels(1);
+  //LoadSongAndUpdateChannels(1);
+  songIsLoading = true;
 
 
 }
@@ -166,7 +168,7 @@ void LoadSongAndUpdateChannels(int index) {
 void onPartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
   char s[100];
   sprintf(s, "part %d ended - ", channelNumber);
-  Serial.print(s);
+  Serial.println(s);
   channels[channelNumber].Stop();
   if(chainToChannel == -1) {
     stopClock();
@@ -178,9 +180,14 @@ void onPartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
   }
 }
 
+void onBeforePartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
+  if(chainToChannel >= 0 && chainToChannel < 8)
+    setSlaveRegisters(now, currentSong.parts[chainToChannel]); 
+}
+
 void onPartStarted(uint8_t channelNumber) {
-  if(currentChannel != channelNumber)
-    setSlaveRegisters(now, currentSong.parts[channelNumber]);  
+  // if(currentChannel != channelNumber)
+  //   setSlaveRegisters(now, currentSong.parts[channelNumber]);  
   currentChannel = channelNumber;
   songIsPlaying = true;
 }
@@ -202,6 +209,11 @@ void setCurrentSongDrumSequencerLastStep(int channel, int value) {
 }
 
 void onAnalogPotChangedHandler(int channel, int pot, uint16_t value) {
+  // ###handle bad pots###
+  if(channel == 2 && pot == 0) return;
+  if(channel == 4 && pot == 1) return;
+  if(channel == 6 && pot == 0) return;
+
   if(pot==0) {
     channels[channel].SetPageCountRaw(value);
     setCurrentSongDrumSequencerLastStep(channel, channels[channel].PageCount()*16);
@@ -251,6 +263,7 @@ void write595byte(uint8_t data, uint8_t bitOrder = LSBFIRST) {
 void scanOperationsBoard() {
   uint8_t incoming = read165byte();
   //printByteln(incoming);
+  if(incoming == 0xFF) return;
 
   programBtn.update(incoming, now);
   loadBtn.update(incoming, now);
@@ -266,6 +279,7 @@ void scanChannelBoards() {
     if(i % 8 == 0) {// only read 1 165 pr 8 channels
       incoming = read165byte();
       //printByteln(incoming);
+      if(incoming == 0xFF) return;
     }
 
     channels[i].Button()->update(incoming, now);
@@ -570,6 +584,7 @@ void loop() {
   }
 
   scanAnalogInputMux();
+
  
 // NEXT SONG INDEX
   if(!programming && nextSongBtn.wasPressed() && !prevSongBtn.isDown()) {
@@ -657,6 +672,8 @@ void loop() {
   if(now >(lastClockInLed + LED_SHORT_PULSE)) {
     clockInLed = false;
   }
+
+
 
   for(int i=0; i<CHANNELS; i++)
     channels[i].Run(now);

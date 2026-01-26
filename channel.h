@@ -4,6 +4,7 @@
 #include "DebounceButton165.h"
 
 typedef void (*PartCompleted)(uint8_t, uint8_t); // channel number, chainTo
+typedef void (*BeforePartCompleted)(uint8_t, uint8_t); // channel number, chainTo
 typedef void (*PartStarted)(uint8_t); // channel number
 typedef void (*PartStopped)(uint8_t); // channel number
 
@@ -31,6 +32,7 @@ private:
 
   // events
   PartCompleted _onPartCompleted = nullptr;
+  BeforePartCompleted _onBeforePartCompleted = nullptr;
   PartStarted _onPartStarted = nullptr;
   PartStopped _onPartStopped = nullptr;
 
@@ -49,6 +51,10 @@ public:
 
   void OnPartCompleted(PartCompleted handler) {
     _onPartCompleted = handler;
+  }
+
+  void OnBeforePartCompleted(BeforePartCompleted handler) {
+    _onBeforePartCompleted = handler;
   }
 
   void OnPartStarted(PartStarted handler) {
@@ -70,7 +76,7 @@ public:
     _started = false;
     for(int i=0; i<4; i++) {
       _pageLedState[i] = i < _pageCount;
-    }        
+    }
     if(_onPartStopped)
       _onPartStopped(_channelNumber);
   }
@@ -83,7 +89,7 @@ public:
     _started = false;
     for(int i=0; i<4; i++) {
       _pageLedState[i] = i < _pageCount;
-    }     
+    }
     _currentPage = 0;
     _currentStep = 0;
     _remainingRepeats = _repeats;
@@ -91,25 +97,28 @@ public:
 
   void Pulse(uint8_t pulses) {
     if(!_started) return;
-    // happens 24 times pr quarter node 
+    // happens 24 times pr quarter node
     _hasPulse = true;
     if(pulses % 6 == 0) { // every 16th note
-      if(_currentStep == _lastStep && _remainingRepeats == 0) {
-        if(_onPartCompleted)
-          _onPartCompleted(_channelNumber, _chainTo);
-        else
-          Stop();
-      }
-      
       if(_currentStep < _lastStep)
         _currentStep++;
       else {
         _currentStep=0;
-        _remainingRepeats--;
-      }      
-
+        if (_remainingRepeats > 0) {
+            _remainingRepeats--;
+        }
+      }
       _currentPage = _currentStep / 16;
     }
+
+    if (_currentStep == 0 && _remainingRepeats == 0 && pulses == 22) {
+      _onBeforePartCompleted(_channelNumber, _chainTo);
+    }    
+
+    if (_currentStep == 0 && _remainingRepeats == 0 && pulses == 23) {
+      _onPartCompleted(_channelNumber, _chainTo);
+    }
+
     _quaterNodeEdge = pulses % 12 == 0;
   }
 
@@ -155,7 +164,7 @@ public:
     _lastStep = pageCount * 16;
     for(int i=0; i<4; i++) {
       _pageLedState[i] = i < _pageCount;
-    }    
+    }
   }
 
   void SetPageCountRaw(uint16_t raw) {
