@@ -168,7 +168,7 @@ void LoadSongAndUpdateChannels(int index) {
 void onPartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
   char s[100];
   sprintf(s, "part %d ended - ", channelNumber);
-  Serial.println(s);
+  Serial.print(s);
   channels[channelNumber].Stop();
   if(chainToChannel == -1) {
     stopClock();
@@ -288,13 +288,16 @@ void scanChannelBoards() {
       Serial.print("Button pressed: ");
       Serial.println(i);
       if(programming) {
-        while(!getSlaveRegisters(now));
-        currentSong.parts[i].tempo = sharedTempoRegisters;
-        currentSong.parts[i].drumSequencer = sharedDrumSequencerRegisters;
-        currentSong.parts[i].sampler = sharedSamplerRegisters;
-        currentSong.parts[i].repeats = channels[i].Repeats();
-        currentSong.parts[i].chainTo = channels[i].ChainTo();
-        //channels[i].SetLastStep(getPartLastStep(currentSong.parts[i]));
+        bool success = false;
+        while(!getSlaveRegisters(now, success));
+        if(success) {
+          currentSong.parts[i].tempo = sharedTempoRegisters;
+          currentSong.parts[i].drumSequencer = sharedDrumSequencerRegisters;
+          currentSong.parts[i].sampler = sharedSamplerRegisters;
+          currentSong.parts[i].repeats = channels[i].Repeats();
+          currentSong.parts[i].chainTo = channels[i].ChainTo();
+          //channels[i].SetLastStep(getPartLastStep(currentSong.parts[i]));
+        }
       } else {
         setSlaveRegisters(now, currentSong.parts[i]);  
         // if(channels[currentChannel].IsStarted()) {
@@ -583,6 +586,11 @@ void loop() {
     scanInputs();
   }
 
+  for(int i=0; i<CHANNELS; i++)
+    channels[i].Run(now);
+
+  updateUI();    
+
   scanAnalogInputMux();
 
  
@@ -675,10 +683,7 @@ void loop() {
 
 
 
-  for(int i=0; i<CHANNELS; i++)
-    channels[i].Run(now);
 
-  updateUI();  
 
   if(Serial.available()) {
     String command = Serial.readStringUntil('\n');
@@ -695,6 +700,12 @@ void loop() {
       }
       Serial.print("Song loaded from serial and modules loaded from part: ");
       Serial.println(index);
+    } else if (command.indexOf('?') == 0) {
+      String number = command.substring(1);
+      int index=number.toInt();
+      if(index >= 0 && index < CHANNELS) {
+        channels[index].Print();
+      }
     } else {
       SlaveEnum target;
       int index = songParser.parseCommand(command, target);    

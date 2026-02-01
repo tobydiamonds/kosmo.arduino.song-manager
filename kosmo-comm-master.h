@@ -86,8 +86,9 @@ bool getKosmoSampleRegisters(unsigned long now, int slaveIndex) {
   return true;  
 }
 
-bool getSlaveRegisters(unsigned long now) {
+bool getSlaveRegisters(unsigned long now, bool &success) {
   // Check if we are in programming mode and if a request is in progress
+  success = false;
   bool results[numberOfSlaves] = {false};
   for(int i=0; i<numberOfSlaves; i++) {
 
@@ -108,13 +109,19 @@ bool getSlaveRegisters(unsigned long now) {
     
       if (status) {
         results[i] = true;
+        slaves[i].retries = 0;        
+        success = true;
       } else if(slaves[i].retries < RETRY_LIMIT) {
         slaves[i].retries++;
         Serial.print("No registers received from slave ");
         Serial.print(i);
         Serial.println(". Retrying in 1s");
+      } else {
+        // unable to get data from slave within the retry limit
+        results[i] = true;
+        slaves[i].retries = 0;      
+        success = false;
       }
-
       slaves[i].requestInProgress = false;
     }
   }
@@ -135,7 +142,8 @@ void setKosmoTempoRegisters(unsigned long now, int slaveIndex, TempoRegisters re
   Wire.write(&buffer[0], totalSize);
   int result = Wire.endTransmission(); 
   if(result != 0) {
-    Serial.println("Error while sending data to slave");
+    Serial.print("Error while sending data to clock");
+    Serial.println(result);
     return false;    
   }
   return true;
@@ -156,7 +164,8 @@ bool setKosmoDrumSequencerRegisters(unsigned long now, int slaveIndex, DrumSeque
     Wire.write(&buffer[offset], chunkSize);
     int result = Wire.endTransmission(); 
     if(result != 0) {
-      Serial.println("Error while sending data to slave");
+      Serial.print("Error while sending data to drum sequencer");
+      Serial.println(result);
       return false;    
     }
     chunkIndex++;    
@@ -174,7 +183,8 @@ bool setSamplerRegisters(unsigned long now, int slaveIndex, SamplerRegisters sam
   Wire.write(&buffer[0], totalSize);
   int result = Wire.endTransmission(); 
   if(result != 0) {
-    Serial.println("Error while sending data to slave");
+    Serial.print("Error while sending data to sampler: ");
+    Serial.println(result);
     return false;    
   }
   return true;

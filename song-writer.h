@@ -11,6 +11,7 @@ class SongWriter {
     File file;
 
     void writeLine(const String& line) {
+      Serial.println(line);
       if (file) {
         file.println(line);
       } else {

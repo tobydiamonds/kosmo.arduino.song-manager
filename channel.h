@@ -109,13 +109,16 @@ public:
         }
       }
       _currentPage = _currentStep / 16;
+      char s[100];
+      sprintf(s, "part: %d  currentpage: %d  currentstep: %d  laststep: %d  remaining: %d", _channelNumber, _currentPage, _currentStep, _lastStep, _remainingRepeats);
+      Serial.println(s);
     }
 
-    if (_currentStep == 0 && _remainingRepeats == 0 && pulses == 22) {
+    if (_currentStep == _lastStep && _remainingRepeats == 0 && ((pulses+2) % 6) == 0) {
       _onBeforePartCompleted(_channelNumber, _chainTo);
     }    
 
-    if (_currentStep == 0 && _remainingRepeats == 0 && pulses == 23) {
+    if (_currentStep == _lastStep && _remainingRepeats == 0 && ((pulses+1) % 6) == 0) {
       _onPartCompleted(_channelNumber, _chainTo);
     }
 
@@ -161,7 +164,9 @@ public:
 
   void SetPageCount(uint8_t pageCount) {
     _pageCount = pageCount;
-    _lastStep = pageCount * 16;
+    _lastStep = pageCount * 16 - 1;
+    if(pageCount == 0) _lastStep = 0;
+
     for(int i=0; i<4; i++) {
       _pageLedState[i] = i < _pageCount;
     }
@@ -200,6 +205,17 @@ public:
     else if(_lastStep < 32) pageCount = 2;
     else if(_lastStep < 48) pageCount = 3;
     SetPageCount(pageCount);
+  }
+
+  void Print() {
+    char s[100];
+    sprintf(s, "part: %d  currentpage: %d  pages: %d  currentstep: %d  laststep: %d  repeats: %d  remaining: %d  chain: %d  is-playing: ", _channelNumber, _currentPage, _pageCount, _currentStep, _lastStep, _repeats, _remainingRepeats, _chainTo);
+    Serial.print(s);
+    if(_started)
+      Serial.print("1");
+    else
+      Serial.print("0");
+    Serial.println();
   }
 };
 
