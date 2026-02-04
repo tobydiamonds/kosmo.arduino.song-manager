@@ -165,18 +165,23 @@ void LoadSongAndUpdateChannels(int index) {
   }  
 }
 
+bool partCompleted = false;
+int completedPart = -1;
+
+bool chainToNextPart = false;
+int nextPart = -1;
+
+
 void onPartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
-  char s[100];
-  sprintf(s, "part %d ended - ", channelNumber);
-  Serial.print(s);
-  channels[channelNumber].Stop();
+  completedPart = channelNumber;
+  partCompleted = true;
+
   if(chainToChannel == -1) {
     stopClock();
     Serial.println("no chain - stopping the clock");
   } else if(chainToChannel < CHANNELS) {
-    channels[chainToChannel].Start();
-    sprintf(s, "chaining to part %d", chainToChannel);
-    Serial.println(s);    
+    nextPart = chainToChannel;
+    chainToNextPart = true;
   }
 }
 
@@ -188,12 +193,14 @@ void onBeforePartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
 void onPartStarted(uint8_t channelNumber) {
   // if(currentChannel != channelNumber)
   //   setSlaveRegisters(now, currentSong.parts[channelNumber]);  
+  // Serial.print("starting ");
+  // channels[channelNumber].Print();
   currentChannel = channelNumber;
   songIsPlaying = true;
 }
 
 void onPartStopped(uint8_t channelNumber) {
-  songIsPlaying = false;
+  //songIsPlaying = false;
 }
 
 void onClockPulse() {
@@ -299,17 +306,17 @@ void scanChannelBoards() {
           //channels[i].SetLastStep(getPartLastStep(currentSong.parts[i]));
         }
       } else {
-        setSlaveRegisters(now, currentSong.parts[i]);  
-        // if(channels[currentChannel].IsStarted()) {
-        //   int chainTo = channels[currentChannel].ChainTo();
-        //   channels[currentChannel].SetChainTo(i);
-        //   if(chainTo != -1 && channels[i].ChainTo() == -1) {
-        //     channels[i].SetChainTo(chainTo);
-        //   }
-        // } else {
-        //   startClock();  
-        //   channels[i].Start();
-        // }
+        if(channels[currentChannel].IsStarted()) {
+          int chainTo = channels[currentChannel].ChainTo();
+          channels[currentChannel].SetChainTo(i);
+          if(chainTo != -1 && channels[i].ChainTo() == -1) {
+            channels[i].SetChainTo(chainTo);
+          }
+        } else {
+          setSlaveRegisters(now, currentSong.parts[i]);
+          startClock();  
+          channels[i].Start();
+        }
       }
     }
     
@@ -579,6 +586,21 @@ void loop() {
     if(!songIsPlaying)
       channels[currentChannel].Start();
     triggerClockPulse();
+  }
+
+  if(partCompleted && ppqnCounter == 0 && completedPart >= 0 and completedPart < CHANNELS) {
+    partCompleted = false;
+    // char s[100];
+    // sprintf(s, "part %d ended - ", completedPart);
+    // Serial.print(s);    
+    channels[completedPart].Stop();
+  }
+
+  if(chainToNextPart && ppqnCounter == 0 && nextPart >= 0 && nextPart < CHANNELS) {
+    chainToNextPart = false;
+    // Serial.print("chaining to part ");      
+    // Serial.println(nextPart);
+    channels[nextPart].Start();
   }
 
   if (now > (lastInputScan + SCAN_INTERVAL)) {

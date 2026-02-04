@@ -70,6 +70,7 @@ bool getKosmoDrumSequencerRegisters(unsigned long now, int slaveIndex) {
 }
 
 bool getKosmoSampleRegisters(unsigned long now, int slaveIndex) {
+  return true;
   Wire.requestFrom(slaves[slaveIndex].address, slaves[slaveIndex].registerSize);
 
   if(Wire.available() == 0) {
@@ -175,6 +176,7 @@ bool setKosmoDrumSequencerRegisters(unsigned long now, int slaveIndex, DrumSeque
 }
 
 bool setSamplerRegisters(unsigned long now, int slaveIndex, SamplerRegisters sampler) {
+  return true;
   const size_t totalSize = slaves[slaveIndex].registerSize;
   uint8_t buffer[totalSize];
   memcpy(buffer, &sampler, totalSize); 
@@ -193,8 +195,8 @@ bool setSamplerRegisters(unsigned long now, int slaveIndex, SamplerRegisters sam
 void setSlaveRegister(unsigned long now, Part part, SlaveEnum slave) {
   int index = (int)slave;
 
-  Serial.print("Starting SET request to slave ");
-  Serial.println(index);
+  // Serial.print("Starting SET request to slave ");
+  // Serial.println(index);
   slaves[index].requestInProgress = true;
 
   if(slave == TEMPO)

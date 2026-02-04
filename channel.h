@@ -95,11 +95,24 @@ public:
     _remainingRepeats = _repeats;
   }
 
+
+    int beforeCompleted = 0;
+    int completed = 0;
   void Pulse(uint8_t pulses) {
     if(!_started) return;
     // happens 24 times pr quarter node
     _hasPulse = true;
+
+    if(_currentStep == 0) {
+      beforeCompleted = 0;
+      completed = 0;
+    }
+
     if(pulses % 6 == 0) { // every 16th note
+      // char s[150];
+      // sprintf(s, "part: %d  pulse: %2d  currentpage: %d  currentstep: %2d  laststep: %2d  remaining: %d  before-completed: %d  completed: %d", _channelNumber, pulses, _currentPage, _currentStep, _lastStep, _remainingRepeats, beforeCompleted, completed);
+      // Serial.println(s);
+
       if(_currentStep < _lastStep)
         _currentStep++;
       else {
@@ -109,18 +122,20 @@ public:
         }
       }
       _currentPage = _currentStep / 16;
-      char s[100];
-      sprintf(s, "part: %d  currentpage: %d  currentstep: %d  laststep: %d  remaining: %d", _channelNumber, _currentPage, _currentStep, _lastStep, _remainingRepeats);
-      Serial.println(s);
+
     }
 
     if (_currentStep == _lastStep && _remainingRepeats == 0 && ((pulses+2) % 6) == 0) {
       _onBeforePartCompleted(_channelNumber, _chainTo);
+      beforeCompleted = pulses;
     }    
 
     if (_currentStep == _lastStep && _remainingRepeats == 0 && ((pulses+1) % 6) == 0) {
       _onPartCompleted(_channelNumber, _chainTo);
-    }
+      completed = pulses;
+    }    
+
+
 
     _quaterNodeEdge = pulses % 12 == 0;
   }
@@ -208,7 +223,7 @@ public:
   }
 
   void Print() {
-    char s[100];
+    char s[200];
     sprintf(s, "part: %d  currentpage: %d  pages: %d  currentstep: %d  laststep: %d  repeats: %d  remaining: %d  chain: %d  is-playing: ", _channelNumber, _currentPage, _pageCount, _currentStep, _lastStep, _repeats, _remainingRepeats, _chainTo);
     Serial.print(s);
     if(_started)
