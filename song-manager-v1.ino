@@ -710,7 +710,30 @@ void loop() {
   if(Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
-    if(command=="init") {
+    if(command.indexOf("load ")==0) {
+      int songToLoad=-1;
+      int size=0;
+      String* parts = splitString(command, ' ', size);
+      if(size == 2 && tryGetInt(parts[1], songToLoad)) {
+        LoadSongAndUpdateChannels(songToLoad);
+      }
+    } else if(command=="save") {
+      SaveSong(currentSong, currentSongNumber);
+      currentChannel = 0;
+      ppqnCounter = 0;
+      Serial.println("###SONG SAVED###");      
+    } else if(command.indexOf("start ")==0) {
+      int partToStart=-1;
+      int size=0;
+      String* parts = splitString(command, ' ', size);
+      if(size == 2 && tryGetInt(parts[1], partToStart) && partToStart >= 0 && partToStart < CHANNELS) {
+        setSlaveRegisters(now, currentSong.parts[partToStart]);
+        startClock();  
+        channels[partToStart].Start();
+      }      
+    } else if(command=="stop") {
+      stopClock();
+    } else if(command=="init") {
       resetSong(currentSong);
       applyCurrentSongToChannels();
       Serial.println("Song initialized");
@@ -731,10 +754,10 @@ void loop() {
     } else {
       SlaveEnum target;
       int index = songParser.parseCommand(command, target);    
-      if(programming && index >= 0 && index < CHANNELS) {
+      if(index >= 0 && index < CHANNELS) {
         applyCurrentSongToChannel(index);
       }    
-      if(programming && index >= 0 && index < CHANNELS && target >= 0 && target < 100) {
+      if(index >= 0 && index < CHANNELS && target >= 0 && target < 100) {
         setSlaveRegisters(now, currentSong.parts[index], target); 
       }      
     }

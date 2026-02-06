@@ -217,16 +217,16 @@ class SerialSongParser {
       int size=0;
       String* parts = splitString(command, ':', size);
 
-      char s[100];
-      sprintf(s, "command: %s  (%d parts) => ", command.c_str(), size);
-      Serial.print(s);      
-      for(int i=0; i<size; i++) {
-        Serial.print(parts[i]);
-        if(i<size-1) {
-          Serial.print(",");
-        }
-      }
-      Serial.println();
+      // char s[100];
+      // sprintf(s, "command: %s  (%d parts) => ", command.c_str(), size);
+      // Serial.print(s);      
+      // for(int i=0; i<size; i++) {
+      //   Serial.print(parts[i]);
+      //   if(i<size-1) {
+      //     Serial.print(",");
+      //   }
+      // }
+      // Serial.println();
 
       if(size==1) { // no module
         // e.g. 0=2 0 2

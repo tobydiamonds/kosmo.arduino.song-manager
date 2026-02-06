@@ -48,7 +48,15 @@ class SongWriter {
           
           line = String(partIndex) + ":seq:" + String(channelIndex) + "=";
           for (int pageIndex = 0; pageIndex < 4; pageIndex++) {
-            line += String(channel.page[pageIndex], BIN);
+            uint16_t steps = channel.page[pageIndex];
+            if(steps == 0) {
+              line += "0";
+            } else {
+              String pattern = String(steps, BIN);
+              while(pattern.length() < 16) // pad with 0s
+                pattern = "0" + pattern;
+              line += pattern;
+            }
             if (pageIndex < 3) {
               line += " ";
             }
@@ -78,6 +86,8 @@ class SongWriter {
         Serial.print("Error opening file: ");
         Serial.println(filename);
       }
+      Serial.println("### RAW SONG CONTENT AT SAVE SONG ###");
+
       convertSongToLines(song);
       Serial.println("Song saved successfully.");
       if (file) {

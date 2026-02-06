@@ -59,8 +59,11 @@ Song LoadSong(int index, bool &success) {
   Song song = Song();
   SerialSongParser parser(song);
 
+  Serial.println("### RAW SONG CONTENT AT LOAD SONG ###");
+
   while (file.available()) {
     String command = file.readStringUntil('\n');
+    Serial.println(command);
     SlaveEnum target;
     int partIndex = parser.parseCommand(command, target);
     if (partIndex == -1) {
