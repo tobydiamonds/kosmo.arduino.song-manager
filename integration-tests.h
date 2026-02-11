@@ -175,40 +175,63 @@ bool SequencerTest_SetDataFromMaster(TestContext context) {
   bool ena[5] = {true, true, false, false, false};
   int steps[5] = {31, 31, 0, 0, 0};
 
-  DrumSequencer regs;
-  for(int i=0; i<5; i++) {
-    regs.channel[i].divider = 6;
-    regs.channel[i].enabled = ena[i];
-    regs.channel[i].lastStep = steps[i];
-    regs.channel[i].page[0] = 0x8888;
-    regs.channel[i].page[1] = 0x888D;
-    regs.channel[i].page[2] = 0;
-    regs.channel[i].page[3] = 0;
+  DrumSequencer regs[8];
+  for(int part=0; part<8; part++) {
+    for(int i=0; i<5; i++) {
+      regs[part].channel[i].divider = 6;
+      regs[part].channel[i].enabled = ena[i];
+      regs[part].channel[i].lastStep = steps[i];
+      regs[part].channel[i].page[0] = 0x8888;
+      regs[part].channel[i].page[1] = 0x888D;
+      regs[part].channel[i].page[2] = 0;
+      regs[part].channel[i].page[3] = 0;
+    }
+    regs[part].chainModeEnabled = false;
   }
-  regs.chainModeEnabled = false;
   size_t totalSize = sizeof(DrumSequencer);
   int totalChunks = (totalSize + 31) / 32;
-  int chunkIndex = 0;
 
-  uint8_t buffer[totalSize];
-  memcpy(buffer, &regs, totalSize);  
 
-  // act
-  for(int i=0; i<totalChunks; i++) {
-    size_t offset = chunkIndex * 32;
-    size_t chunkSize = min(32, totalSize - offset);
-    Wire.beginTransmission(SLAVE_ADDR_DRUM_SEQUENCER);
-    Wire.write(&buffer[offset], chunkSize);
-    int result = Wire.endTransmission(); 
-    if(result != 0) {
-      Serial.println("Error while sending data to slave");
-      return false;    
+  for(int part=0; part<8; part++) {
+    int chunkIndex = 0;
+    uint8_t buffer[totalSize];
+    memcpy(buffer, &regs[part], totalSize);  
+
+    // act
+    for(int i=0; i<totalChunks; i++) {
+      size_t offset = chunkIndex * 32;
+      size_t chunkSize = min(32, totalSize - offset);
+      Wire.beginTransmission(SLAVE_ADDR_DRUM_SEQUENCER);
+      Wire.write(&buffer[offset], chunkSize);
+      int result = Wire.endTransmission(); 
+      if(result != 0) {
+        Serial.println("Error while sending data to slave");
+        return false;    
+      }
+      chunkIndex++;    
     }
-    chunkIndex++;    
   }
-
   // assert
 
+  return true;
+}
+
+bool SequencerTest_SetPartIndexFromMaster(TestContext context) {
+  Serial.println("Running test SequencerTest_SetPartIndexFromMaster:");
+
+  // arrange
+  int partIndex = context.index;
+
+  // act
+  Wire.beginTransmission(SLAVE_ADDR_DRUM_SEQUENCER);
+  Wire.write(partIndex);
+  int result = Wire.endTransmission(); 
+  if(result != 0) {
+    Serial.print("Error while sending part-index to drum sequencer: ");
+    Serial.println(result);
+    return false;    
+  }
+  // assert
   return true;
 }
 
@@ -244,6 +267,8 @@ void runIntegrationTest(int testIndex, int channel, Song song) {
       result = SequencerTest_GetDataFromSlave(context); break;
     case 7:
       result = SequencerTest_SetDataFromMaster(context); break;
+    case 8:
+      result = SequencerTest_SetPartIndexFromMaster(context); break;
     default:
       result = false; break;
   }

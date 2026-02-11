@@ -141,20 +141,24 @@ class SerialSongParser {
       int size;
       String* parts = splitString(values, ' ', size);
       if(size != 3) {
-        Serial.println("Invalid arguments for song programmer!");
+        Serial.print("Invalid arguments for song programmer: ");
+        Serial.println(values);
         error = true;
       }
 
       if(!tryGetInt(parts[0], pages)) {
-        Serial.println("Invalid value for pos 0/pages");
+        Serial.print("Invalid value for pos 0/pages: ");
+        Serial.println(parts[0]);
         error = true;
       }
       if(!tryGetInt(parts[1], repeats)) {
-        Serial.println("Invalid value for pos 1/repeats");
+        Serial.print("Invalid value for pos 1/repeats: ");
+        Serial.println(parts[1]);
         error = true;
       }
       if(!tryGetInt(parts[2], chainTo)) {
-        Serial.println("Invalid value for pos 2/chainTo");
+        Serial.print("Invalid value for pos 2/chainTo: ");
+        Serial.println(parts[2]);
         error = true;
       }      
 
@@ -176,17 +180,9 @@ class SerialSongParser {
 
       if(error) return false;
 
+      _song.parts[partIndex].pages = pages;
       _song.parts[partIndex].repeats = repeats;
       _song.parts[partIndex].chainTo = chainTo;
-
-       // Calculate lastStep based on pages
-      int lastStep = pages * 16 - 1;
-      if (pages == 0) lastStep = 0;
-
-      // Set lastStep for all drum sequencer channels
-      for (int i = 0; i < 5; i++) {
-        _song.parts[partIndex].drumSequencer.channel[i].lastStep = lastStep;
-      }
 
       return true;
     }
@@ -200,6 +196,7 @@ class SerialSongParser {
 
       if(command=="init") return -1;
       if(command=="apply") return -1;
+      if(command.indexOf("#")==0) return -1;
 
 
       int partIndex;
@@ -253,7 +250,8 @@ class SerialSongParser {
         path = parts[2].substring(0, pos);
         values = parts[2].substring(pos + 1);
       } else {
-        Serial.println("Invalid command!");
+        Serial.print("Invalid command: ");
+        Serial.println(command);
         return -1;
       }
 

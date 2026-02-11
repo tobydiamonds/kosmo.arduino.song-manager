@@ -2,10 +2,10 @@
 #include "DebounceButton165.h"
 #include "kosmo-comm-master.h"
 #include "channel.h"
-#include "song-repository.h"
 #include "AnalogMuxScanner.h"
 #include "integration-tests.h"
 #include "serial-song-parser.h"
+#include "song-repository-eeprom.h"
 
 
 // input bit mask
@@ -84,6 +84,8 @@ AnalogMuxScanner analogPotBank1(MUX_S0, MUX_S1, MUX_S2, A0, A1, A2, CHANNELS);
 
 Channel channels[CHANNELS];
 
+SongRepositoryEEPROM songRepository;
+
 SerialSongParser songParser(currentSong);
 
 void setup() {
@@ -123,7 +125,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(CLOCK_IN_PIN), onClockPulse, RISING);  
 
   // song repository
-  SetupSongRepository();
+    //SetupSongRepository();
+
 
   Serial.println("Song Manager ready!");
 
@@ -142,7 +145,7 @@ void LoadSongAndUpdateChannels(int index) {
   resetSong(currentSong);
 
   bool success;
-  currentSong = LoadSong(index, success);
+  currentSong = songRepository.LoadSong(index, success);
   if(!success) {
     char s[100];
     sprintf(s, "Error loading song %d", index);
@@ -152,6 +155,8 @@ void LoadSongAndUpdateChannels(int index) {
     songLoadingLed = false;
     selectedSongNumber = currentSongNumber;
   } else {
+    sendAllDrumSequencerParts(now, currentSong);
+
     applyCurrentSongToChannels();
     Serial.println("###SONG LOADED###");
 
@@ -186,8 +191,10 @@ void onPartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
 }
 
 void onBeforePartCompleted(uint8_t channelNumber, int8_t chainToChannel) {
-  if(chainToChannel >= 0 && chainToChannel < 8)
+  if(chainToChannel >= 0 && chainToChannel < 8) {
+    sendPartIndex(now, chainToChannel);
     setSlaveRegisters(now, currentSong.parts[chainToChannel]); 
+  }
 }
 
 void onPartStarted(uint8_t channelNumber) {
@@ -223,7 +230,8 @@ void onAnalogPotChangedHandler(int channel, int pot, uint16_t value) {
 
   if(pot==0) {
     channels[channel].SetPageCountRaw(value);
-    setCurrentSongDrumSequencerLastStep(channel, channels[channel].PageCount()*16);
+    //setCurrentSongDrumSequencerLastStep(channel, channels[channel].PageCount()*16);
+    currentSong.parts[channel].pages = channels[channel].PageCount();
   } else if(pot==1) {
     channels[channel].SetRepeatsRaw(value);
     currentSong.parts[channel].repeats = channels[channel].Repeats();
@@ -303,6 +311,7 @@ void scanChannelBoards() {
           currentSong.parts[i].sampler = sharedSamplerRegisters;
           currentSong.parts[i].repeats = channels[i].Repeats();
           currentSong.parts[i].chainTo = channels[i].ChainTo();
+          currentSong.parts[i].pages = channels[i].PageCount();
           //channels[i].SetLastStep(getPartLastStep(currentSong.parts[i]));
         }
       } else {
@@ -314,6 +323,7 @@ void scanChannelBoards() {
           }
         } else {
           setSlaveRegisters(now, currentSong.parts[i]);
+          sendPartIndex(now, i);
           startClock();  
           channels[i].Start();
         }
@@ -665,7 +675,7 @@ void loop() {
       Serial.println("programming...");
     } else { 
 // END PROGRAMMING                          
-      SaveSong(currentSong, selectedSongNumber);
+      songRepository.SaveSong(currentSong, selectedSongNumber);
       currentChannel = 0;
       ppqnCounter = 0;
 
@@ -718,21 +728,33 @@ void loop() {
         LoadSongAndUpdateChannels(songToLoad);
       }
     } else if(command=="save") {
-      SaveSong(currentSong, currentSongNumber);
+      songRepository.SaveSong(currentSong, currentSongNumber);
       currentChannel = 0;
       ppqnCounter = 0;
       Serial.println("###SONG SAVED###");      
+    } else if(command=="print") {
+      printSong(currentSong);
     } else if(command.indexOf("start ")==0) {
       int partToStart=-1;
       int size=0;
       String* parts = splitString(command, ' ', size);
       if(size == 2 && tryGetInt(parts[1], partToStart) && partToStart >= 0 && partToStart < CHANNELS) {
         setSlaveRegisters(now, currentSong.parts[partToStart]);
-        startClock();  
+        sendPartIndex(now, partToStart);
+        delay(100);
         channels[partToStart].Start();
+        startClock();  
       }      
     } else if(command=="stop") {
       stopClock();
+    } else if (command.indexOf("test ")==0) {
+      int size=0;
+      String* parts = splitString(command, ' ', size);
+      int testIndex = -1;
+      int partIndex = -1;
+      if(size==3 & tryGetInt(parts[1], testIndex) && tryGetInt(parts[2], partIndex)) {
+        runIntegrationTest(testIndex, partIndex, currentSong);
+      }
     } else if(command=="init") {
       resetSong(currentSong);
       applyCurrentSongToChannels();
@@ -757,26 +779,10 @@ void loop() {
       if(index >= 0 && index < CHANNELS) {
         applyCurrentSongToChannel(index);
       }    
-      if(index >= 0 && index < CHANNELS && target >= 0 && target < 100) {
-        setSlaveRegisters(now, currentSong.parts[index], target); 
-      }      
+      // if(index >= 0 && index < CHANNELS && target >= 0 && target < 100) {
+      //   setSlaveRegisters(now, currentSong.parts[index], target); 
+      // }      
     }
-    // if(programming) {
-    //   String command = Serial.readStringUntil('\n');
-    //   SlaveEnum target;
-    //   int index = songParser.parseCommand(command, target);    
-    //   if(index >= 0 && index < CHANNELS) {
-    //     applyCurrentSongToChannel(index);
-    //     setSlaveRegisters(now, currentSong.parts[index], target); 
-    //   }
-    // } else {
-
-    //   int test;
-    //   int channel;
-    //   if(getSerialData(test, channel)) {
-    //     runIntegrationTest(test, channel, currentSong);
-    //   }
-    // }
   } 
 }
 

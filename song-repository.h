@@ -72,9 +72,13 @@ Song LoadSong(int index, bool &success) {
       return Song();
     }
   }
-  file.close();
-  Serial.print("Song loaded from: ");
-  Serial.println(filename);  
+
+  if(!success) {
+    file.close();
+    Serial.print("Song loaded from: ");
+    Serial.println(filename);  
+    return Song();
+  }
   success = true;
 
   //printSong(song);

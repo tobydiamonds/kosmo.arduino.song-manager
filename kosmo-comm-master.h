@@ -150,6 +150,20 @@ void setKosmoTempoRegisters(unsigned long now, int slaveIndex, TempoRegisters re
   return true;
 }
 
+bool sendPartIndex(unsigned long now, int partIndex) {
+  Wire.beginTransmission(SLAVE_ADDR_DRUM_SEQUENCER);
+  Wire.write(partIndex);
+  int result = Wire.endTransmission(); 
+  if(result != 0) {
+    Serial.print("Error while sending part-index to drum sequencer: ");
+    Serial.println(result);
+    return false;    
+  }  
+  return true;
+}
+
+
+
 bool setKosmoDrumSequencerRegisters(unsigned long now, int slaveIndex, DrumSequencer drums) {
   size_t totalSize = slaves[slaveIndex].registerSize;
   int totalChunks = (totalSize + 31) / 32;
@@ -173,6 +187,13 @@ bool setKosmoDrumSequencerRegisters(unsigned long now, int slaveIndex, DrumSeque
   }
 
   return true;
+}
+
+bool sendAllDrumSequencerParts(unsigned long now, Song song) {
+  bool result = true;
+  for(int part=0; part<CHANNELS; part++) {
+    result &= setKosmoDrumSequencerRegisters(now, 1, song.parts[part].drumSequencer);
+  }
 }
 
 bool setSamplerRegisters(unsigned long now, int slaveIndex, SamplerRegisters sampler) {
@@ -212,7 +233,9 @@ void setSlaveRegister(unsigned long now, Part part, SlaveEnum slave) {
 void setSlaveRegisters(unsigned long now, Part part, SlaveEnum slave = ALL) {
   if(slave == ALL) {
     for(int i=0; i<numberOfSlaves; i++) {
-      setSlaveRegister(now, part, (SlaveEnum)i);
+      if(i != 1) { // skip drum sequencer
+        setSlaveRegister(now, part, (SlaveEnum)i);
+      }
     }
   } else {
     setSlaveRegister(now, part, slave);

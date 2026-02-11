@@ -200,6 +200,7 @@ struct DrumSequencer {
 };
 
 struct Part {
+  uint8_t pages = 0;
   uint8_t repeats = 0;
   int8_t chainTo = -1;
   TempoRegisters tempo;
@@ -260,6 +261,7 @@ void resetDrumSequencerRegisters(DrumSequencer &regs) {
 }
 
 void resetPart(Part &part) {
+    part.pages = 0;
     part.repeats = 0;
     part.chainTo = -1; 
     
@@ -313,7 +315,7 @@ void printDrumSequencer(DrumSequencer drums) {
 
 void printSongPart(Part part, int index) {
   char s[100];
-  sprintf(s, "part %d => repeats: %d | chainTo: %d", index, part.repeats, part.chainTo);
+  sprintf(s, "part %d => pages: %d | repeats: %d | chainTo: %d", index, part.pages, part.repeats, part.chainTo);
   Serial.println(s);
   printTempoRegisters(part.tempo);
   printDrumSequencer(part.drumSequencer);
